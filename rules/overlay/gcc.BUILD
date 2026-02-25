@@ -1,0 +1,2321 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Number of split partitions for generated source files (matches configure default).
+_NUM_SPLITS = 10
+
+_SPLIT_IDS = ["0" + str(i) if i < 10 else str(i) for i in range(1, _NUM_SPLITS + 1)]
+
+# ============================================================================
+# Machine description files for x86_64
+# ============================================================================
+
+filegroup(
+    name = "md_files",
+    srcs = ["common.md"] +
+           glob(["config/i386/*.md"]),
+)
+
+# ============================================================================
+# Common include paths and defines
+# ============================================================================
+
+_GCC_COPTS = [
+    "-DIN_GCC",
+    "-DHAVE_CONFIG_H",
+    "-DBASEVER='\"16.0.1\"'",
+    "-DDATESTAMP='\" 20260218\"'",
+    "-DDEVPHASE='\"experimental\"'",
+    "-DREVISION='\"\"'",
+    "-DPKGVERSION='\"(GCC) \"'",
+    "-DBUGURL='\"https://gcc.gnu.org/bugs/\"'",
+    "-DTARGET_NAME='\"x86_64-linux-gnu\"'",
+    "-DLOCALEDIR='\"/usr/local/share/locale\"'",
+    "-DPREFIX='\"/usr/local/\"'",
+    "-DSTANDARD_STARTFILE_PREFIX='\"/usr/local/lib/\"'",
+    "-DSTANDARD_EXEC_PREFIX='\"/usr/local/lib/gcc/\"'",
+    "-DSTANDARD_LIBEXEC_PREFIX='\"/usr/local/libexec/gcc/\"'",
+    "-DDEFAULT_TARGET_VERSION='\"16.0.1\"'",
+    "-DDEFAULT_TARGET_MACHINE='\"x86_64-linux-gnu\"'",
+    "-DSTANDARD_BINDIR_PREFIX='\"/usr/local/bin/\"'",
+    "-DTOOLDIR_BASE_PREFIX='\"../\"'",
+    "-DTARGET_MACHINE='\"x86_64-linux-gnu\"'",
+]
+
+_GCC_INCLUDES = [
+    ".",
+    "config/i386",
+    "config",
+]
+
+# ============================================================================
+# Layer 4: Generator support libraries (exec platform)
+# ============================================================================
+
+_GEN_COPTS = [
+    "-DGENERATOR_FILE",
+    "-DHAVE_CONFIG_H",
+]
+
+_GEN_INCLUDES = ["."]
+
+# all-tree.def - generated file that includes all tree code definitions
+genrule(
+    name = "gen_all_tree_def",
+    outs = ["all-tree.def"],
+    cmd = """cat > $@ << 'ALLEOF'
+#include "tree.def"
+END_OF_BASE_TREE_CODES
+#include "c-family/c-common.def"
+#include "c/c-tree.def"
+#include "cp/cp-tree.def"
+#include "d/d-tree.def"
+#include "ada/gcc-interface/ada-tree.def"
+#include "algol68/a68-tree.def"
+#include "m2/m2-tree.def"
+#include "objc/objc-tree.def"
+ALLEOF""",
+)
+
+# GCC source headers needed by generators and backend
+cc_library(
+    name = "gcc_headers",
+    hdrs = [":gen_all_tree_def"] + glob([
+        "*.h",
+        "*.def",
+        "c-family/*.h",
+        "c-family/*.def",
+        "c/*.h",
+        "c/*.def",
+        "cp/*.h",
+        "cp/*.def",
+        "lto/*.h",
+        "d/*.def",
+        "ada/gcc-interface/*.def",
+        "algol68/*.def",
+        "m2/*.def",
+        "objc/*.def",
+        "jit/*.def",
+        "rust/*.def",
+        "config/i386/*.h",
+        "config/i386/*.def",
+        "config/i386/*.inc",
+        "config/*.h",
+        "common/*.h",
+        "common/*.def",
+        "common/config/i386/*.h",
+        "custom-sarif-properties/*.h",
+        "diagnostics/*.h",
+        "diagnostics/*.def",
+        "text-art/*.h",
+        "text-art/*.inc",
+        "analyzer/*.h",
+        "rtl-ssa/*.h",
+        "rtl-ssa/*.inl",
+        "sym-exec/*.h",
+        "topics/*.h",
+    ]),
+    # These .cc/.tcc files are #include'd textually by source or headers
+    textual_hdrs = [
+        "gcov-io.cc",
+        "generic-match-head.cc",
+        "gimple-match-head.cc",
+        "gimple-range-tests.cc",
+        "splay-tree-utils.tcc",
+    ],
+    includes = ["."],
+)
+
+cc_library(
+    name = "build_errors",
+    srcs = ["errors.cc"],
+    hdrs = ["errors.h"],
+    copts = _GEN_COPTS,
+    includes = _GEN_INCLUDES,
+    deps = [
+        ":gcc_headers",
+        "//:include",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_bconfig",
+    ],
+)
+
+cc_library(
+    name = "build_support",
+    srcs = [
+        "ggc-none.cc",
+        "hash-table.cc",
+        "inchash.cc",
+        "sort.cc",
+        "vec.cc",
+    ],
+    copts = _GEN_COPTS,
+    includes = _GEN_INCLUDES,
+    deps = [
+        ":build_errors",
+        ":gen_gtype_hdrs",
+        ":gen_required_hdrs",
+        "//:include",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_config",
+    ],
+)
+
+cc_library(
+    name = "build_md",
+    srcs = ["read-md.cc"],
+    copts = _GEN_COPTS,
+    includes = _GEN_INCLUDES,
+    deps = [
+        ":build_errors",
+        ":gen_modes_only_hdrs",
+        "//:include",
+        "//libcpp:cpp",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_bconfig",
+    ],
+)
+
+cc_library(
+    name = "build_rtl",
+    srcs = [
+        "gensupport.cc",
+        "print-rtl.cc",
+        "read-rtl.cc",
+        "rtl.cc",
+        # min-insn-modes.cc is generated by genmodes
+        ":gen_min_insn_modes",
+    ],
+    copts = _GEN_COPTS,
+    includes = _GEN_INCLUDES,
+    deps = [
+        ":build_md",
+        ":build_support",
+        "//:include",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_config",
+    ],
+)
+
+# ============================================================================
+# Layer 4: Generator binaries
+# ============================================================================
+
+# genmodes - standalone, no RTL dependency
+cc_binary(
+    name = "genmodes",
+    srcs = ["genmodes.cc"],
+    copts = _GEN_COPTS,
+    includes = _GEN_INCLUDES,
+    deps = [
+        ":build_errors",
+        "//:include",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_bconfig",
+    ],
+)
+
+# gencheck - standalone (includes coretypes.h + tm.h)
+cc_binary(
+    name = "gencheck",
+    srcs = ["gencheck.cc"],
+    copts = _GEN_COPTS,
+    includes = _GEN_INCLUDES,
+    deps = [
+        ":build_errors",
+        ":gen_required_hdrs",
+        "//:include",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_config",
+    ],
+)
+
+# gengenrtl - standalone
+cc_binary(
+    name = "gengenrtl",
+    srcs = ["gengenrtl.cc"],
+    copts = _GEN_COPTS,
+    includes = _GEN_INCLUDES,
+    deps = [
+        ":build_errors",
+        "//:include",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_bconfig",
+    ],
+)
+
+# genhooks - standalone
+cc_binary(
+    name = "genhooks",
+    srcs = ["genhooks.cc"],
+    copts = _GEN_COPTS,
+    includes = _GEN_INCLUDES,
+    deps = [
+        ":build_errors",
+        "//:include",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_bconfig",
+    ],
+)
+
+# gencfn-macros - needs extra support objects
+cc_binary(
+    name = "gencfn-macros",
+    srcs = ["gencfn-macros.cc"],
+    copts = _GEN_COPTS,
+    includes = _GEN_INCLUDES,
+    deps = [
+        ":build_errors",
+        ":build_support",
+        "//:include",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_bconfig",
+    ],
+)
+
+# Generate gengtype-lex.cc from .l file
+genrule(
+    name = "gen_gengtype_lex",
+    srcs = ["gengtype-lex.l"],
+    outs = ["gengtype-lex.cc"],
+    cmd = """$(execpath @sed//:sed) 's|#include "gengtype.h"|#include "bconfig.h"\\n#include "system.h"\\n#include "errors.h"\\n#include "gengtype.h"|' $(location gengtype-lex.l) > $@.l.tmp && \
+$(FLEX) -o $@ $@.l.tmp && rm $@.l.tmp""",
+    toolchains = ["@rules_flex//flex:current_flex_toolchain"],
+    tools = ["@sed//:sed"],
+)
+
+# gengtype - multiple source files (needs version.h)
+cc_binary(
+    name = "gengtype",
+    srcs = [
+        "gengtype.cc",
+        ":gen_gengtype_lex",
+        "gengtype-parse.cc",
+        "gengtype-state.cc",
+        "gengtype.h",
+        ":gen_version_h",
+    ],
+    copts = _GEN_COPTS,
+    includes = _GEN_INCLUDES,
+    deps = [
+        ":build_errors",
+        "//:include",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_bconfig",
+    ],
+)
+
+# genmatch - needs libcpp + extra support objects + case-cfn-macros.h
+cc_binary(
+    name = "genmatch",
+    srcs = ["genmatch.cc", ":gen_case_cfn_macros"],
+    copts = _GEN_COPTS,
+    includes = _GEN_INCLUDES,
+    deps = [
+        ":build_errors",
+        ":build_support",
+        "//:include",
+        "//libcpp:cpp",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_bconfig",
+    ],
+)
+
+# genconstants - only needs build_md (breaks insn-constants.h cycle)
+cc_binary(
+    name = "genconstants",
+    srcs = ["genconstants.cc"],
+    copts = _GEN_COPTS,
+    includes = _GEN_INCLUDES,
+    deps = [
+        ":build_md",
+        ":gen_modes_only_hdrs",
+        "//:include",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_bconfig",
+    ],
+)
+
+# Generators that use build_rtl (read machine descriptions)
+[cc_binary(
+    name = "gen" + name,
+    srcs = ["gen" + name + ".cc"],
+    copts = _GEN_COPTS,
+    includes = _GEN_INCLUDES,
+    linkopts = ["-lm"] if name == "automata" else [],
+    deps = [
+        ":build_rtl",
+        "//:include",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_config",
+    ] + extra_deps,
+) for name, extra_deps in [
+    ("attr", []),
+    ("attr-common", []),
+    ("attrtab", []),
+    ("automata", []),
+    ("codes", []),
+    ("conditions", []),
+    ("config", []),
+    ("emit", []),
+    ("enums", []),
+    ("extract", []),
+    ("flags", []),
+    ("opinit", []),
+    ("output", []),
+    ("peep", []),
+    ("preds", []),
+    ("recog", [":build_support"]),
+    ("target-def", []),
+]]
+
+# gencondmd - compiled from generated source (genconditions output)
+cc_binary(
+    name = "gencondmd",
+    srcs = [
+        ":gen_gencondmd_src",
+        ":gen_bversion_h",
+        ":gen_tm_preds",
+        ":gen_tm_constrs",
+        ":gen_tree_check",
+        ":gen_genrtl_h",
+        ":gen_version_h",
+    ],
+    copts = _GEN_COPTS,
+    includes = _GEN_INCLUDES,
+    deps = [
+        ":build_rtl",
+        "//:include",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_config",
+    ],
+)
+
+# ============================================================================
+# Layer 5: Generated sources (genrules)
+# ============================================================================
+
+# Phase 1: genmodes (no MD input)
+
+genrule(
+    name = "gen_insn_modes",
+    outs = ["insn-modes.cc"],
+    cmd = "$(location :genmodes) > $@",
+    tools = [":genmodes"],
+)
+
+genrule(
+    name = "gen_insn_modes_h",
+    outs = ["insn-modes.h"],
+    cmd = "$(location :genmodes) -h > $@",
+    tools = [":genmodes"],
+)
+
+genrule(
+    name = "gen_insn_modes_inline_h",
+    outs = ["insn-modes-inline.h"],
+    cmd = "$(location :genmodes) -i > $@",
+    tools = [":genmodes"],
+)
+
+genrule(
+    name = "gen_min_insn_modes",
+    outs = ["min-insn-modes.cc"],
+    cmd = "$(location :genmodes) -m > $@",
+    tools = [":genmodes"],
+)
+
+# Minimal generated headers (just insn-modes) - for build_md and genconstants
+cc_library(
+    name = "gen_modes_only_hdrs",
+    hdrs = [
+        "insn-modes.h",
+        "insn-modes-inline.h",
+    ],
+    includes = ["."],
+)
+
+# Full generated headers needed by most generators
+cc_library(
+    name = "gen_required_hdrs",
+    hdrs = [
+        ":gen_options_h",
+        ":gen_insn_constants",
+    ],
+    includes = ["."],
+    deps = [":gen_modes_only_hdrs"],
+)
+
+# Generated gtype headers needed by genmatch (via hash-table.h -> ggc.h -> gtype-desc.h)
+cc_library(
+    name = "gen_gtype_hdrs",
+    hdrs = [":gen_gtype"],
+    includes = ["."],
+)
+
+# The two main .md files passed as positional args to generators.
+_MD_MAIN = ["common.md", "config/i386/i386.md"]
+_MD_ARGS = "$(location common.md) $(location config/i386/i386.md)"
+
+# Phase 2: Simple generators (take md_file, some need insn-conditions.md)
+
+# genattr -> insn-attr.h (needs insn-conditions.md)
+genrule(
+    name = "gen_insn_attr",
+    srcs = [":md_files", ":gen_insn_conditions_md"] + _MD_MAIN,
+    outs = ["insn-attr.h"],
+    cmd = "$(location :genattr) " + _MD_ARGS + " $(location :gen_insn_conditions_md) > $@",
+    tools = [":genattr"],
+)
+
+# genattr-common -> insn-attr-common.h (needs insn-conditions.md)
+genrule(
+    name = "gen_insn_attr_common",
+    srcs = [":md_files", ":gen_insn_conditions_md"] + _MD_MAIN,
+    outs = ["insn-attr-common.h"],
+    cmd = "$(location :genattr-common) " + _MD_ARGS + " $(location :gen_insn_conditions_md) > $@",
+    tools = [":genattr-common"],
+)
+
+# gencodes -> insn-codes.h (needs insn-conditions.md)
+genrule(
+    name = "gen_insn_codes",
+    srcs = [":md_files", ":gen_insn_conditions_md"] + _MD_MAIN,
+    outs = ["insn-codes.h"],
+    cmd = "$(location :gencodes) " + _MD_ARGS + " $(location :gen_insn_conditions_md) > $@",
+    tools = [":gencodes"],
+)
+
+# genconfig -> insn-config.h (needs insn-conditions.md)
+genrule(
+    name = "gen_insn_config",
+    srcs = [":md_files", ":gen_insn_conditions_md"] + _MD_MAIN,
+    outs = ["insn-config.h"],
+    cmd = "$(location :genconfig) " + _MD_ARGS + " $(location :gen_insn_conditions_md) > $@",
+    tools = [":genconfig"],
+)
+
+# genconstants -> insn-constants.h
+genrule(
+    name = "gen_insn_constants",
+    srcs = [":md_files"] + _MD_MAIN,
+    outs = ["insn-constants.h"],
+    cmd = "$(location :genconstants) " + _MD_ARGS + " > $@",
+    tools = [":genconstants"],
+)
+
+# genflags -> insn-flags.h (needs insn-conditions.md)
+genrule(
+    name = "gen_insn_flags",
+    srcs = [":md_files", ":gen_insn_conditions_md"] + _MD_MAIN,
+    outs = ["insn-flags.h"],
+    cmd = "$(location :genflags) " + _MD_ARGS + " $(location :gen_insn_conditions_md) > $@",
+    tools = [":genflags"],
+)
+
+# gentarget-def -> insn-target-def.h (needs insn-conditions.md)
+genrule(
+    name = "gen_insn_target_def",
+    srcs = [":md_files", ":gen_insn_conditions_md"] + _MD_MAIN,
+    outs = ["insn-target-def.h"],
+    cmd = "$(location :gentarget-def) " + _MD_ARGS + " $(location :gen_insn_conditions_md) > $@",
+    tools = [":gentarget-def"],
+)
+
+# genextract -> insn-extract.cc (needs insn-conditions.md)
+genrule(
+    name = "gen_insn_extract",
+    srcs = [":md_files", ":gen_insn_conditions_md"] + _MD_MAIN,
+    outs = ["insn-extract.cc"],
+    cmd = "$(location :genextract) " + _MD_ARGS + " $(location :gen_insn_conditions_md) > $@",
+    tools = [":genextract"],
+)
+
+# genoutput -> insn-output.cc (needs insn-conditions.md)
+genrule(
+    name = "gen_insn_output",
+    srcs = [":md_files", ":gen_insn_conditions_md"] + _MD_MAIN,
+    outs = ["insn-output.cc"],
+    cmd = "$(location :genoutput) " + _MD_ARGS + " $(location :gen_insn_conditions_md) > $@",
+    tools = [":genoutput"],
+)
+
+# genpeep -> insn-peep.cc (needs insn-conditions.md)
+genrule(
+    name = "gen_insn_peep",
+    srcs = [":md_files", ":gen_insn_conditions_md"] + _MD_MAIN,
+    outs = ["insn-peep.cc"],
+    cmd = "$(location :genpeep) " + _MD_ARGS + " $(location :gen_insn_conditions_md) > $@",
+    tools = [":genpeep"],
+)
+
+# genenums -> insn-enums.cc
+genrule(
+    name = "gen_insn_enums",
+    srcs = [":md_files"] + _MD_MAIN,
+    outs = ["insn-enums.cc"],
+    cmd = "$(location :genenums) " + _MD_ARGS + " > $@",
+    tools = [":genenums"],
+)
+
+# genpreds -> insn-preds.cc, tm-preds.h, tm-constrs.h
+genrule(
+    name = "gen_insn_preds",
+    srcs = [":md_files"] + _MD_MAIN,
+    outs = ["insn-preds.cc"],
+    cmd = "$(location :genpreds) " + _MD_ARGS + " > $@",
+    tools = [":genpreds"],
+)
+
+genrule(
+    name = "gen_tm_preds",
+    srcs = [":md_files"] + _MD_MAIN,
+    outs = ["tm-preds.h"],
+    cmd = "$(location :genpreds) -h " + _MD_ARGS + " > $@",
+    tools = [":genpreds"],
+)
+
+genrule(
+    name = "gen_tm_constrs",
+    srcs = [":md_files"] + _MD_MAIN,
+    outs = ["tm-constrs.h"],
+    cmd = "$(location :genpreds) -c " + _MD_ARGS + " > $@",
+    tools = [":genpreds"],
+)
+
+# Phase 3: Condition generation (2-step)
+
+# Step 1: genconditions -> gencondmd.cc
+genrule(
+    name = "gen_gencondmd_src",
+    srcs = [":md_files"] + _MD_MAIN,
+    outs = ["gencondmd.cc"],
+    cmd = "$(location :genconditions) " + _MD_ARGS + " > $@",
+    tools = [":genconditions"],
+)
+
+# Step 2: gencondmd (compiled above) -> insn-conditions.md
+genrule(
+    name = "gen_insn_conditions_md",
+    outs = ["insn-conditions.md"],
+    cmd = "$(location :gencondmd) > $@",
+    tools = [":gencondmd"],
+)
+
+# Phase 4: Complex generators (need md_file + insn-conditions.md)
+
+# genattrtab -> insn-attrtab.cc, insn-dfatab.cc, insn-latencytab.cc
+genrule(
+    name = "gen_insn_attrtab",
+    srcs = [":md_files", ":gen_insn_conditions_md"] + _MD_MAIN,
+    outs = [
+        "insn-attrtab.cc",
+        "insn-dfatab.cc",
+        "insn-latencytab.cc",
+    ],
+    cmd = "$(location :genattrtab) " + _MD_ARGS + " $(location :gen_insn_conditions_md) " +
+          "-A$(location insn-attrtab.cc) -D$(location insn-dfatab.cc) -L$(location insn-latencytab.cc)",
+    tools = [":genattrtab"],
+)
+
+# genautomata -> insn-automata.cc (needs insn-conditions.md)
+genrule(
+    name = "gen_insn_automata",
+    srcs = [":md_files", ":gen_insn_conditions_md"] + _MD_MAIN,
+    outs = ["insn-automata.cc"],
+    cmd = "$(location :genautomata) " + _MD_ARGS + " $(location :gen_insn_conditions_md) > $@",
+    tools = [":genautomata"],
+)
+
+# genemit -> insn-emit-{01..10}.cc (split outputs)
+genrule(
+    name = "gen_insn_emit",
+    srcs = [":md_files", ":gen_insn_conditions_md"] + _MD_MAIN,
+    outs = ["insn-emit-%s.cc" % i for i in _SPLIT_IDS],
+    cmd = "$(location :genemit) " + _MD_ARGS + " $(location :gen_insn_conditions_md) " +
+          " ".join(["-O$(location insn-emit-%s.cc)" % i for i in _SPLIT_IDS]),
+    tools = [":genemit"],
+)
+
+# genopinit -> insn-opinit.cc, insn-opinit.h
+# Use short name for -h so generated .cc gets #include "insn-opinit.h" (not a long sandbox path)
+genrule(
+    name = "gen_insn_opinit",
+    srcs = [":md_files", ":gen_insn_conditions_md"] + _MD_MAIN,
+    outs = [
+        "insn-opinit.cc",
+        "insn-opinit.h",
+    ],
+    cmd = "$(location :genopinit) " + _MD_ARGS + " $(location :gen_insn_conditions_md) " +
+          "-hinsn-opinit.h -c$(location insn-opinit.cc)" +
+          " && cp insn-opinit.h $(location insn-opinit.h)",
+    tools = [":genopinit"],
+)
+
+# genrecog -> insn-recog-{01..10}.cc, insn-recog.h (split outputs + header)
+# Use short name for -H so generated .cc files get #include "insn-recog.h" (not a long sandbox path)
+genrule(
+    name = "gen_insn_recog",
+    srcs = [":md_files", ":gen_insn_conditions_md"] + _MD_MAIN,
+    outs = ["insn-recog-%s.cc" % i for i in _SPLIT_IDS] + ["insn-recog.h"],
+    cmd = "$(location :genrecog) " + _MD_ARGS + " $(location :gen_insn_conditions_md) " +
+          "-Hinsn-recog.h " +
+          " ".join(["-O$(location insn-recog-%s.cc)" % i for i in _SPLIT_IDS]) +
+          " && cp insn-recog.h $(location insn-recog.h)",
+    tools = [":genrecog"],
+)
+
+# Phase 5: Other generators
+
+# gencheck -> tree-check.h
+genrule(
+    name = "gen_tree_check",
+    outs = ["tree-check.h"],
+    cmd = "$(location :gencheck) > $@",
+    tools = [":gencheck"],
+)
+
+# gengenrtl -> genrtl.h
+genrule(
+    name = "gen_genrtl_h",
+    outs = ["genrtl.h"],
+    cmd = "$(location :gengenrtl) > $@",
+    tools = [":gengenrtl"],
+)
+
+# gencfn-macros -> case-cfn-macros.h
+genrule(
+    name = "gen_case_cfn_macros",
+    outs = ["case-cfn-macros.h"],
+    cmd = "$(location :gencfn-macros) -c > $@",
+    tools = [":gencfn-macros"],
+)
+
+# gencfn-macros -> cfn-operators.pd
+genrule(
+    name = "gen_cfn_operators",
+    outs = ["cfn-operators.pd"],
+    cmd = "$(location :gencfn-macros) -o > $@",
+    tools = [":gencfn-macros"],
+)
+
+# genmatch --gimple -> gimple-match-{01..10}.cc, gimple-match-auto.h
+genrule(
+    name = "gen_gimple_match",
+    srcs = ["match.pd", ":gen_cfn_operators"],
+    outs = ["gimple-match-%s.cc" % i for i in _SPLIT_IDS] + ["gimple-match-auto.h"],
+    cmd = "cp $(location :gen_cfn_operators) $$(dirname $(location match.pd))/cfn-operators.pd && " +
+          "$(location :genmatch) --gimple " +
+          "--header=$(location gimple-match-auto.h) " +
+          "--include=gimple-match-auto.h " +
+          "$(location match.pd) " +
+          " ".join(["$(location gimple-match-%s.cc)" % i for i in _SPLIT_IDS]),
+    tools = [":genmatch"],
+)
+
+# genmatch --generic -> generic-match-{01..10}.cc, generic-match-auto.h
+genrule(
+    name = "gen_generic_match",
+    srcs = ["match.pd", ":gen_cfn_operators"],
+    outs = ["generic-match-%s.cc" % i for i in _SPLIT_IDS] + ["generic-match-auto.h"],
+    cmd = "cp $(location :gen_cfn_operators) $$(dirname $(location match.pd))/cfn-operators.pd && " +
+          "$(location :genmatch) --generic " +
+          "--header=$(location generic-match-auto.h) " +
+          "--include=generic-match-auto.h " +
+          "$(location match.pd) " +
+          " ".join(["$(location generic-match-%s.cc)" % i for i in _SPLIT_IDS]),
+    tools = [":genmatch"],
+)
+
+# Phase 6: genhooks -> target-hooks-def.h, c-family/c-target-hooks-def.h,
+#   common/common-target-hooks-def.h
+genrule(
+    name = "gen_target_hooks_def",
+    outs = ["target-hooks-def.h"],
+    cmd = '$(location :genhooks) "Target Hook" > $@',
+    tools = [":genhooks"],
+)
+
+genrule(
+    name = "gen_c_target_hooks_def",
+    outs = ["c-family/c-target-hooks-def.h"],
+    cmd = '$(location :genhooks) "C Target Hook" > $@',
+    tools = [":genhooks"],
+)
+
+genrule(
+    name = "gen_common_target_hooks_def",
+    outs = ["common/common-target-hooks-def.h"],
+    cmd = '$(location :genhooks) "Common Target Hook" > $@',
+    tools = [":genhooks"],
+)
+
+genrule(
+    name = "gen_d_target_hooks_def",
+    outs = ["d/d-target-hooks-def.h"],
+    cmd = '$(location :genhooks) "D Target Hook" > $@',
+    tools = [":genhooks"],
+)
+
+# Phase 7: Options processing (AWK pipeline)
+
+_OPT_FILES = [
+    # Base opt files
+    "common.opt",
+    "params.opt",
+    "analyzer/analyzer.opt",
+    "c-family/c.opt",
+    # Language opt files (needed for Language definitions)
+    "ada/gcc-interface/lang.opt",
+    "algol68/lang.opt",
+    "cobol/lang.opt",
+    "d/lang.opt",
+    "fortran/lang.opt",
+    "go/lang.opt",
+    "lto/lang.opt",
+    "m2/lang.opt",
+    "rust/lang.opt",
+    # Target/config opt files
+    "config/fused-madd.opt",
+    "config/gnu-user.opt",
+    "config/i386/i386.opt",
+    "config/linux.opt",
+    "config/linux-android.opt",
+]
+
+_OPT_URL_FILES = [f + ".urls" for f in _OPT_FILES]
+
+genrule(
+    name = "gen_optionlist",
+    srcs = _OPT_FILES + _OPT_URL_FILES + ["opt-gather.awk"],
+    outs = ["optionlist"],
+    cmd = "LC_ALL=C $(execpath @gawk//:gawk) -f $(location opt-gather.awk) " +
+          " ".join(["$(location %s)" % f for f in _OPT_FILES + _OPT_URL_FILES]) +
+          " > $@",
+    tools = ["@gawk//:gawk"],
+)
+
+# optionlist -> options.h
+genrule(
+    name = "gen_options_h",
+    srcs = [
+        ":gen_optionlist",
+        "opt-functions.awk",
+        "opt-read.awk",
+        "opth-gen.awk",
+    ],
+    outs = ["options.h"],
+    cmd = "$(execpath @gawk//:gawk) -f $(location opt-functions.awk) -f $(location opt-read.awk) " +
+          "-f $(location opth-gen.awk) < $(location :gen_optionlist) > $@",
+    tools = ["@gawk//:gawk"],
+)
+
+# optionlist -> options.cc
+genrule(
+    name = "gen_options_cc",
+    srcs = [
+        ":gen_optionlist",
+        "opt-functions.awk",
+        "opt-read.awk",
+        "optc-gen.awk",
+    ],
+    outs = ["options.cc"],
+    cmd = "$(execpath @gawk//:gawk) -f $(location opt-functions.awk) -f $(location opt-read.awk) " +
+          "-f $(location optc-gen.awk) " +
+          '-v header_name="config.h system.h coretypes.h options.h tm.h" ' +
+          "< $(location :gen_optionlist) > $@",
+    tools = ["@gawk//:gawk"],
+)
+
+# optionlist -> options-save.cc
+genrule(
+    name = "gen_options_save",
+    srcs = [
+        ":gen_optionlist",
+        "opt-functions.awk",
+        "opt-read.awk",
+        "optc-save-gen.awk",
+    ],
+    outs = ["options-save.cc"],
+    cmd = "$(execpath @gawk//:gawk) -f $(location opt-functions.awk) -f $(location opt-read.awk) " +
+          "-f $(location optc-save-gen.awk) " +
+          '-v header_name="config.h system.h coretypes.h tm.h" ' +
+          "< $(location :gen_optionlist) > $@",
+    tools = ["@gawk//:gawk"],
+)
+
+# optionlist -> options-urls.cc
+genrule(
+    name = "gen_options_urls",
+    srcs = [
+        ":gen_optionlist",
+        "opt-functions.awk",
+        "opt-read.awk",
+        "options-urls-cc-gen.awk",
+    ],
+    outs = ["options-urls.cc"],
+    cmd = "$(execpath @gawk//:gawk) -f $(location opt-functions.awk) -f $(location opt-read.awk) " +
+          "-f $(location options-urls-cc-gen.awk) " +
+          '-v header_name="config.h system.h coretypes.h tm.h" ' +
+          "< $(location :gen_optionlist) > $@",
+    tools = ["@gawk//:gawk"],
+)
+
+# Phase 8: gengtype
+_GT_HEADERS = [
+    "gt-alias.h",
+    "gt-analyzer-language.h",
+    "gt-asan.h",
+    "gt-attribs.h",
+    "gt-bitmap.h",
+    "gt-btfout.h",
+    "gt-c-c-decl.h",
+    "gt-c-c-parser.h",
+    "gt-c-family-c-common.h",
+    "gt-c-family-c-cppbuiltin.h",
+    "gt-c-family-c-format.h",
+    "gt-c-family-c-pragma.h",
+    "gt-caller-save.h",
+    "gt-cfgrtl.h",
+    "gt-cgraph.h",
+    "gt-cgraphclones.h",
+    "gt-coverage.h",
+    "gt-cp-call.h",
+    "gt-cp-class.h",
+    "gt-cp-constexpr.h",
+    "gt-cp-constraint.h",
+    "gt-cp-contracts.h",
+    "gt-cp-coroutines.h",
+    "gt-cp-cp-gimplify.h",
+    "gt-cp-cp-lang.h",
+    "gt-cp-cp-objcp-common.h",
+    "gt-cp-decl.h",
+    "gt-cp-decl2.h",
+    "gt-cp-except.h",
+    "gt-cp-friend.h",
+    "gt-cp-init.h",
+    "gt-cp-lambda.h",
+    "gt-cp-lex.h",
+    "gt-cp-logic.h",
+    "gt-cp-mangle.h",
+    "gt-cp-method.h",
+    "gt-cp-module.h",
+    "gt-cp-name-lookup.h",
+    "gt-cp-parser.h",
+    "gt-cp-pt.h",
+    "gt-cp-reflect.h",
+    "gt-cp-rtti.h",
+    "gt-cp-semantics.h",
+    "gt-cp-tree.h",
+    "gt-cp-vtable-class-hierarchy.h",
+    "gt-cselib.h",
+    "gt-ctfout.h",
+    "gt-dojump.h",
+    "gt-dwarf2asm.h",
+    "gt-dwarf2cfi.h",
+    "gt-dwarf2ctf.h",
+    "gt-dwarf2out.h",
+    "gt-emit-rtl.h",
+    "gt-except.h",
+    "gt-explow.h",
+    "gt-function.h",
+    "gt-gcse.h",
+    "gt-ggc-tests.h",
+    "gt-gimple-expr.h",
+    "gt-godump.h",
+    "gt-i386.h",
+    "gt-i386-builtins.h",
+    "gt-i386-expand.h",
+    "gt-i386-options.h",
+    "gt-ipa-devirt.h",
+    "gt-ipa-modref.h",
+    "gt-ipa-prop.h",
+    "gt-ipa-sra.h",
+    "gt-ipa-strub.h",
+    "gt-lists.h",
+    "gt-lto-lto-common.h",
+    "gt-lto-lto-lang.h",
+    "gt-omp-low.h",
+    "gt-optabs-libfuncs.h",
+    "gt-stor-layout.h",
+    "gt-stringpool.h",
+    "gt-symtab-thunks.h",
+    "gt-targhooks.h",
+    "gt-trans-mem.h",
+    "gt-tree.h",
+    "gt-tree-iterator.h",
+    "gt-tree-nested.h",
+    "gt-tree-phinodes.h",
+    "gt-tree-profile.h",
+    "gt-tree-scalar-evolution.h",
+    "gt-tree-ssa-address.h",
+    "gt-tree-ssa-loop-ivopts.h",
+    "gt-tree-vect-generic.h",
+    "gt-ubsan.h",
+    "gt-varasm.h",
+    "gt-vtable-verify.h",
+    "gtype-c.h",
+    "gtype-cp.h",
+    "gtype-lto.h",
+    "gtype-desc.h",
+    "gtype-desc.cc",
+]
+
+# gengtype output files (pre-generated, copied by gcc_source rule)
+genrule(
+    name = "gen_gtype",
+    srcs = glob(["gengtype-output/*"]),
+    outs = _GT_HEADERS,
+    cmd = """
+        OUTDIR=$$(dirname $(location gtype-desc.cc))
+        for f in $(SRCS); do
+            cp "$$f" "$$OUTDIR/$$(basename $$f)"
+        done
+    """,
+)
+
+# Phase 9: i386-specific generated file
+genrule(
+    name = "gen_i386_builtin_types",
+    srcs = [
+        "config/i386/i386-builtin-types.def",
+        "config/i386/i386-builtin-types.awk",
+    ],
+    outs = ["i386-builtin-types.inc"],
+    cmd = "$(execpath @gawk//:gawk) -f $(location config/i386/i386-builtin-types.awk) " +
+          "$(location config/i386/i386-builtin-types.def) > $@",
+    tools = ["@gawk//:gawk"],
+)
+
+# bversion.h (generated from BASE-VER)
+genrule(
+    name = "gen_bversion_h",
+    srcs = ["BASE-VER"],
+    outs = ["bversion.h"],
+    cmd = """
+        BASEVER=$$(cat $(location BASE-VER))
+        MAJOR=$${BASEVER%%.*}
+        TEMP=$${BASEVER#*.}
+        MINOR=$${TEMP%%.*}
+        PATCH=$${BASEVER##*.}
+        echo "#define BUILDING_GCC_MAJOR $$MAJOR" > $@
+        echo "#define BUILDING_GCC_MINOR $$MINOR" >> $@
+        echo "#define BUILDING_GCC_PATCHLEVEL $$PATCH" >> $@
+        echo "#define BUILDING_GCC_VERSION (BUILDING_GCC_MAJOR * 1000 + BUILDING_GCC_MINOR)" >> $@
+    """,
+)
+
+# version.h (generated by genversion)
+cc_binary(
+    name = "genversion",
+    srcs = ["genversion.cc"],
+    copts = _GEN_COPTS + [
+        "-DBASEVER='\"16.0.1\"'",
+        "-DDATESTAMP='\" 20260218\"'",
+        "-DDEVPHASE='\"experimental\"'",
+        "-DREVISION='\"\"'",
+        "-DPKGVERSION='\"(GCC) \"'",
+        "-DBUGURL='\"https://gcc.gnu.org/bugs/\"'",
+    ],
+    includes = _GEN_INCLUDES,
+    deps = [
+        ":build_errors",
+        "//:include",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_bconfig",
+    ],
+)
+
+genrule(
+    name = "gen_version_h",
+    outs = ["version.h"],
+    cmd = "$(location :genversion) > $@",
+    tools = [":genversion"],
+)
+
+# pass-instances.def (generated from passes.def via awk)
+genrule(
+    name = "gen_pass_instances_def",
+    srcs = [
+        "passes.def",
+        "config/i386/i386-passes.def",
+        "gen-pass-instances.awk",
+    ],
+    outs = ["pass-instances.def"],
+    cmd = "$(execpath @gawk//:gawk) -f $(location gen-pass-instances.awk) " +
+          "$(location passes.def) $(location config/i386/i386-passes.def) > $@",
+    tools = ["@gawk//:gawk"],
+)
+
+# omp-device-properties.h stub (no offload targets in minimal build)
+genrule(
+    name = "gen_omp_device_properties",
+    outs = ["omp-device-properties.h"],
+    cmd = """
+        echo 'const char omp_offload_device_kind[] = "";' > $@
+        echo 'const char omp_offload_device_arch[] = "";' >> $@
+        echo 'const char omp_offload_device_isa[] = "";' >> $@
+    """,
+)
+
+
+# gthr-default.h (posix threads for x86_64-linux-gnu)
+genrule(
+    name = "gen_gthr_default",
+    outs = ["gthr-default.h"],
+    cmd = "echo '#include \"gthr-posix.h\"' > $@",
+)
+
+# cc1-checksum stub (non-bootstrap)
+genrule(
+    name = "gen_cc1_checksum",
+    outs = ["cc1-checksum.cc"],
+    cmd = """
+        cat > $@ << 'CEOF'
+#include "config.h"
+#include "system.h"
+EXPORTED_CONST unsigned char executable_checksum[16] = { 0 };
+CEOF
+    """,
+)
+
+# version.cc stub
+genrule(
+    name = "gen_version_cc",
+    outs = ["version.cc"],
+    cmd = """
+        cat > $@ << 'CEOF'
+#include "version.h"
+CEOF
+    """,
+)
+
+# ============================================================================
+# Collected generated headers (for easy dep referencing)
+# ============================================================================
+
+cc_library(
+    name = "generated_headers",
+    hdrs = [
+        ":gen_bversion_h",
+        ":gen_case_cfn_macros",
+        ":gen_common_target_hooks_def",
+        ":gen_c_target_hooks_def",
+        ":gen_d_target_hooks_def",
+        ":gen_genrtl_h",
+        ":gen_generic_match",
+        ":gen_gimple_match",
+        ":gen_gtype",
+        ":gen_i386_builtin_types",
+        ":gen_insn_attr",
+        ":gen_insn_attr_common",
+        ":gen_insn_codes",
+        ":gen_insn_config",
+        ":gen_insn_constants",
+        ":gen_insn_flags",
+        ":gen_insn_modes_h",
+        ":gen_insn_modes_inline_h",
+        ":gen_insn_opinit",
+        ":gen_insn_recog",
+        ":gen_insn_target_def",
+        ":gen_omp_device_properties",
+        ":gen_options_h",
+        ":gen_pass_instances_def",
+        ":gen_target_hooks_def",
+        ":gen_tm_constrs",
+        ":gen_tm_preds",
+        ":gen_tree_check",
+        ":gen_version_h",
+        ":gen_gthr_default",
+    ],
+    includes = ["."],
+    deps = [
+        "@gcc_config//:gcc_config",
+    ],
+)
+
+# ============================================================================
+# Layer 6: Backend library (libbackend equivalent)
+# ============================================================================
+
+# OBJS from Makefile.in (static backend .cc files)
+_BACKEND_SRCS = [
+    "adjust-alignment.cc",
+    "alias.cc",
+    "alloc-pool.cc",
+    "asm-toplevel.cc",
+    "asan.cc",
+    "attr-callback.cc",
+    "auto-inc-dec.cc",
+    "auto-profile.cc",
+    "avoid-store-forwarding.cc",
+    "bb-reorder.cc",
+    "bitmap.cc",
+    "btfout.cc",
+    "builtins.cc",
+    "caller-save.cc",
+    "calls.cc",
+    "ccmp.cc",
+    "cfg.cc",
+    "cfganal.cc",
+    "cfgbuild.cc",
+    "cfgcleanup.cc",
+    "cfgexpand.cc",
+    "cfghooks.cc",
+    "cfgloop.cc",
+    "cfgloopanal.cc",
+    "cfgloopmanip.cc",
+    "cfgrtl.cc",
+    "cgraph.cc",
+    "cgraphbuild.cc",
+    "cgraphclones.cc",
+    "cgraphunit.cc",
+    "combine-stack-adj.cc",
+    "combine.cc",
+    "compare-elim.cc",
+    "context.cc",
+    "convert.cc",
+    "coroutine-passes.cc",
+    "coverage.cc",
+    "cppbuiltin.cc",
+    "cppdefault.cc",
+    "cprop.cc",
+    "crc-verification.cc",
+    "cse.cc",
+    "cselib.cc",
+    "ctfc.cc",
+    "ctfout.cc",
+    "data-streamer-in.cc",
+    "data-streamer-out.cc",
+    "data-streamer.cc",
+    "dbgcnt.cc",
+    "dce.cc",
+    "ddg.cc",
+    "debug.cc",
+    "dep-fusion.cc",
+    "df-core.cc",
+    "df-problems.cc",
+    "df-scan.cc",
+    "dfp.cc",
+    "diagnostic-context-rich-location.cc",
+    "digraph.cc",
+    "dojump.cc",
+    "dominance.cc",
+    "domwalk.cc",
+    "double-int.cc",
+    "dse.cc",
+    "dumpfile.cc",
+    "dwarf2asm.cc",
+    "dwarf2cfi.cc",
+    "dwarf2codeview.cc",
+    "dwarf2ctf.cc",
+    "dwarf2out.cc",
+    "early-remat.cc",
+    "emit-rtl.cc",
+    "et-forest.cc",
+    "except.cc",
+    "explow.cc",
+    "expmed.cc",
+    "expr.cc",
+    "ext-dce.cc",
+    "fibonacci_heap.cc",
+    "file-prefix-map.cc",
+    "final.cc",
+    "fixed-value.cc",
+    "fold-const-call.cc",
+    "fold-const.cc",
+    "fold-mem-offsets.cc",
+    "function-abi.cc",
+    "function-tests.cc",
+    "function.cc",
+    "fwprop.cc",
+    "gcc-attribute-urlifier.cc",
+    "gcc-rich-location.cc",
+    "gcc-urlifier.cc",
+    "gcse-common.cc",
+    "gcse.cc",
+    "ggc-common.cc",
+    "ggc-page.cc",
+    "ggc-tests.cc",
+    "gimple-array-bounds.cc",
+    "gimple-builder.cc",
+    "gimple-crc-optimization.cc",
+    "gimple-expr.cc",
+    "gimple-fold.cc",
+    "gimple-harden-conditionals.cc",
+    "gimple-harden-control-flow.cc",
+    "gimple-if-to-switch.cc",
+    "gimple-isel.cc",
+    "gimple-iterator.cc",
+    "gimple-laddress.cc",
+    "gimple-loop-interchange.cc",
+    "gimple-loop-jam.cc",
+    "gimple-loop-versioning.cc",
+    "gimple-low.cc",
+    "gimple-lower-bitint.cc",
+    "gimple-match-exports.cc",
+    "gimple-predicate-analysis.cc",
+    "gimple-pretty-print.cc",
+    "gimple-range-cache.cc",
+    "gimple-range-edge.cc",
+    "gimple-range-fold.cc",
+    "gimple-range-gori.cc",
+    "gimple-range-infer.cc",
+    "gimple-range-op.cc",
+    "gimple-range-path.cc",
+    "gimple-range-phi.cc",
+    "gimple-range-trace.cc",
+    "gimple-range.cc",
+    "gimple-ssa-backprop.cc",
+    "gimple-ssa-isolate-paths.cc",
+    "gimple-ssa-nonnull-compare.cc",
+    "gimple-ssa-pta-constraints.cc",
+    "gimple-ssa-sccopy.cc",
+    "gimple-ssa-split-paths.cc",
+    "gimple-ssa-store-merging.cc",
+    "gimple-ssa-strength-reduction.cc",
+    "gimple-ssa-sprintf.cc",
+    "gimple-ssa-warn-access.cc",
+    "gimple-ssa-warn-alloca.cc",
+    "gimple-ssa-warn-restrict.cc",
+    "gimple-streamer-in.cc",
+    "gimple-streamer-out.cc",
+    "gimple-walk.cc",
+    "gimple-warn-recursion.cc",
+    "gimple.cc",
+    "gimplify-me.cc",
+    "gimplify.cc",
+    "godump.cc",
+    "graph.cc",
+    "graphds.cc",
+    "graphite-dependences.cc",
+    "graphite-isl-ast-to-gimple.cc",
+    "graphite-optimize-isl.cc",
+    "graphite-poly.cc",
+    "graphite-scop-detection.cc",
+    "graphite-sese-to-poly.cc",
+    "graphite.cc",
+    "haifa-sched.cc",
+    "hash-map-tests.cc",
+    "hash-set-tests.cc",
+    "hierarchical_discriminator.cc",
+    "hw-doloop.cc",
+    "hwint.cc",
+    "ifcvt.cc",
+    "inchash.cc",
+    "incpath.cc",
+    "init-regs.cc",
+    "internal-fn.cc",
+    "ipa-comdats.cc",
+    "ipa-cp.cc",
+    "ipa-devirt.cc",
+    "ipa-fnsummary.cc",
+    "ipa-free-lang-data.cc",
+    "ipa-icf-gimple.cc",
+    "ipa-icf.cc",
+    "ipa-inline-analysis.cc",
+    "ipa-inline-transform.cc",
+    "ipa-inline.cc",
+    "ipa-locality-cloning.cc",
+    "ipa-modref-tree.cc",
+    "ipa-modref.cc",
+    "ipa-param-manipulation.cc",
+    "ipa-polymorphic-call.cc",
+    "ipa-predicate.cc",
+    "ipa-profile.cc",
+    "ipa-prop.cc",
+    "ipa-pure-const.cc",
+    "ipa-ref.cc",
+    "ipa-reference.cc",
+    "ipa-split.cc",
+    "ipa-sra.cc",
+    "ipa-strub.cc",
+    "ipa-utils.cc",
+    "ipa.cc",
+    "ira-build.cc",
+    "ira-color.cc",
+    "ira-conflicts.cc",
+    "ira-costs.cc",
+    "ira-emit.cc",
+    "ira-lives.cc",
+    "ira.cc",
+    "jump.cc",
+    "langhooks.cc",
+    "late-combine.cc",
+    "lcm.cc",
+    "lists.cc",
+    "loop-doloop.cc",
+    "loop-init.cc",
+    "loop-invariant.cc",
+    "loop-iv.cc",
+    "loop-unroll.cc",
+    "lower-subreg.cc",
+    "lra-assigns.cc",
+    "lra-coalesce.cc",
+    "lra-constraints.cc",
+    "lra-eliminations.cc",
+    "lra-lives.cc",
+    "lra-remat.cc",
+    "lra-spills.cc",
+    "lra.cc",
+    "lto-cgraph.cc",
+    "lto-compress.cc",
+    "lto-opts.cc",
+    "lto-section-in.cc",
+    "lto-section-out.cc",
+    "lto-streamer-in.cc",
+    "lto-streamer-out.cc",
+    "lto-streamer.cc",
+    "mcf.cc",
+    "mode-switching.cc",
+    "modulo-sched.cc",
+    "multiple_target.cc",
+    "omp-expand.cc",
+    "omp-general.cc",
+    "omp-low.cc",
+    "omp-offload.cc",
+    "omp-oacc-kernels-decompose.cc",
+    "omp-oacc-neuter-broadcast.cc",
+    "omp-simd-clone.cc",
+    "opt-problem.cc",
+    "optabs-libfuncs.cc",
+    "optabs-query.cc",
+    "optabs-tree.cc",
+    "optabs.cc",
+    "optinfo-emit-json.cc",
+    "optinfo.cc",
+    "opts-global.cc",
+    "ordered-hash-map-tests.cc",
+    "pair-fusion.cc",
+    "passes.cc",
+    "path-coverage.cc",
+    "plugin.cc",
+    "pointer-query.cc",
+    "postreload-gcse.cc",
+    "postreload.cc",
+    "predict.cc",
+    "prime-paths.cc",
+    "print-rtl-function.cc",
+    "print-rtl.cc",
+    "print-tree.cc",
+    "profile-count.cc",
+    "profile.cc",
+    "pta-andersen.cc",
+    "range-op-float.cc",
+    "range-op-ptr.cc",
+    "range-op.cc",
+    "range.cc",
+    "read-md.cc",
+    "read-rtl-function.cc",
+    "read-rtl.cc",
+    "real.cc",
+    "realmpfr.cc",
+    "recog.cc",
+    "ree.cc",
+    "reg-stack.cc",
+    "regcprop.cc",
+    "reginfo.cc",
+    "regrename.cc",
+    "regstat.cc",
+    "reload.cc",
+    "reload1.cc",
+    "reorg.cc",
+    "resource.cc",
+    "rtl-error.cc",
+    "rtl-tests.cc",
+    "rtl.cc",
+    "rtlanal.cc",
+    "rtlhash.cc",
+    "rtlhooks.cc",
+    "rtx-vector-builder.cc",
+    "run-rtl-passes.cc",
+    "sancov.cc",
+    "sanopt.cc",
+    "sched-deps.cc",
+    "sched-ebb.cc",
+    "sched-rgn.cc",
+    "sel-sched-dump.cc",
+    "sel-sched-ir.cc",
+    "sel-sched.cc",
+    "selftest-rtl.cc",
+    "selftest-run-tests.cc",
+    "sese.cc",
+    "shrink-wrap.cc",
+    "simple-diagnostic-path.cc",
+    "simplify-rtx.cc",
+    "sparseset.cc",
+    "spellcheck-tree.cc",
+    "splay-tree-utils.cc",
+    "sreal.cc",
+    "stack-ptr-mod.cc",
+    "statistics.cc",
+    "stmt.cc",
+    "stor-layout.cc",
+    "store-motion.cc",
+    "streamer-hooks.cc",
+    "stringpool.cc",
+    "substring-locations.cc",
+    "symtab-clones.cc",
+    "symtab-thunks.cc",
+    "symtab.cc",
+    "target-globals.cc",
+    "targhooks.cc",
+    "timevar.cc",
+    "toplev.cc",
+    "tracer.cc",
+    "trans-mem.cc",
+    "tree-affine.cc",
+    "tree-assume.cc",
+    "tree-call-cdce.cc",
+    "tree-cfg.cc",
+    "tree-cfgcleanup.cc",
+    "tree-chrec.cc",
+    "tree-complex.cc",
+    "tree-data-ref.cc",
+    "tree-dfa.cc",
+    "tree-diagnostic-cfg.cc",
+    "tree-diagnostic-client-data-hooks.cc",
+    "tree-diagnostic.cc",
+    "tree-dump.cc",
+    "tree-eh.cc",
+    "tree-emutls.cc",
+    "tree-if-conv.cc",
+    "tree-inline.cc",
+    "tree-into-ssa.cc",
+    "tree-iterator.cc",
+    "tree-logical-location.cc",
+    "tree-loop-distribution.cc",
+    "tree-nested.cc",
+    "tree-nrv.cc",
+    "tree-object-size.cc",
+    "tree-outof-ssa.cc",
+    "tree-parloops.cc",
+    "tree-phinodes.cc",
+    "tree-predcom.cc",
+    "tree-pretty-print.cc",
+    "tree-profile.cc",
+    "tree-scalar-evolution.cc",
+    "tree-sra.cc",
+    "tree-ssa-address.cc",
+    "tree-ssa-alias.cc",
+    "tree-ssa-ccp.cc",
+    "tree-ssa-coalesce.cc",
+    "tree-ssa-copy.cc",
+    "tree-ssa-dce.cc",
+    "tree-ssa-dom.cc",
+    "tree-ssa-dse.cc",
+    "tree-ssa-forwprop.cc",
+    "tree-ssa-ifcombine.cc",
+    "tree-ssa-live.cc",
+    "tree-ssa-loop-ch.cc",
+    "tree-ssa-loop-im.cc",
+    "tree-ssa-loop-ivcanon.cc",
+    "tree-ssa-loop-ivopts.cc",
+    "tree-ssa-loop-manip.cc",
+    "tree-ssa-loop-niter.cc",
+    "tree-ssa-loop-prefetch.cc",
+    "tree-ssa-loop-split.cc",
+    "tree-ssa-loop-unswitch.cc",
+    "tree-ssa-loop.cc",
+    "tree-ssa-math-opts.cc",
+    "tree-ssa-operands.cc",
+    "tree-ssa-phiopt.cc",
+    "tree-ssa-phiprop.cc",
+    "tree-ssa-pre.cc",
+    "tree-ssa-propagate.cc",
+    "tree-ssa-reassoc.cc",
+    "tree-ssa-sccvn.cc",
+    "tree-ssa-scopedtables.cc",
+    "tree-ssa-sink.cc",
+    "tree-ssa-strlen.cc",
+    "tree-ssa-structalias.cc",
+    "tree-ssa-tail-merge.cc",
+    "tree-ssa-ter.cc",
+    "tree-ssa-threadbackward.cc",
+    "tree-ssa-threadedge.cc",
+    "tree-ssa-threadupdate.cc",
+    "tree-ssa-uncprop.cc",
+    "tree-ssa-uninit.cc",
+    "tree-ssa.cc",
+    "tree-ssanames.cc",
+    "tree-stdarg.cc",
+    "tree-streamer-in.cc",
+    "tree-streamer-out.cc",
+    "tree-streamer.cc",
+    "tree-switch-conversion.cc",
+    "tree-tailcall.cc",
+    "tree-vect-data-refs.cc",
+    "tree-vect-generic.cc",
+    "tree-vect-loop-manip.cc",
+    "tree-vect-loop.cc",
+    "tree-vect-patterns.cc",
+    "tree-vect-slp-patterns.cc",
+    "tree-vect-slp.cc",
+    "tree-vect-stmts.cc",
+    "tree-vector-builder.cc",
+    "tree-vectorizer.cc",
+    "tree-vrp.cc",
+    "tree.cc",
+    "tristate.cc",
+    "tsan.cc",
+    "typed-splay-tree.cc",
+    "ubsan.cc",
+    "valtrack.cc",
+    "value-pointer-equiv.cc",
+    "value-prof.cc",
+    "value-query.cc",
+    "value-range-pretty-print.cc",
+    "value-range-storage.cc",
+    "value-range.cc",
+    "value-relation.cc",
+    "var-tracking.cc",
+    "varasm.cc",
+    "varpool.cc",
+    "vec-perm-indices.cc",
+    "vmsdbgout.cc",
+    "vr-values.cc",
+    "vtable-verify.cc",
+    "warning-control.cc",
+    "web.cc",
+    "wide-int-print.cc",
+    "wide-int.cc",
+    # rtl-ssa/
+    "rtl-ssa/accesses.cc",
+    "rtl-ssa/blocks.cc",
+    "rtl-ssa/changes.cc",
+    "rtl-ssa/functions.cc",
+    "rtl-ssa/insns.cc",
+    "rtl-ssa/movement.cc",
+    # sym-exec/
+    "sym-exec/sym-exec-condition.cc",
+    "sym-exec/sym-exec-expression.cc",
+    "sym-exec/sym-exec-state.cc",
+    # Target-specific: i386
+    "config/i386/i386.cc",
+    "config/i386/i386-options.cc",
+    "config/i386/i386-builtins.cc",
+    "config/i386/i386-expand.cc",
+    "config/i386/i386-features.cc",
+    "config/i386/x86-tune-sched.cc",
+    "config/i386/x86-tune-sched-atom.cc",
+    "config/i386/x86-tune-sched-bd.cc",
+    "config/i386/x86-tune-sched-core.cc",
+    # Host-specific: Linux
+    "config/host-linux.cc",
+    # i386/linux gnu-property
+    "config/i386/gnu-property.cc",
+    # Analyzer
+    "analyzer/access-diagram.cc",
+    "analyzer/ana-state-to-diagnostic-state.cc",
+    "analyzer/analysis-plan.cc",
+    "analyzer/analyzer-language.cc",
+    "analyzer/analyzer-logging.cc",
+    "analyzer/analyzer-pass.cc",
+    "analyzer/analyzer-selftests.cc",
+    "analyzer/analyzer.cc",
+    "analyzer/bar-chart.cc",
+    "analyzer/bounds-checking.cc",
+    "analyzer/call-details.cc",
+    "analyzer/call-info.cc",
+    "analyzer/call-string.cc",
+    "analyzer/call-summary.cc",
+    "analyzer/checker-event.cc",
+    "analyzer/checker-path.cc",
+    "analyzer/complexity.cc",
+    "analyzer/constraint-manager.cc",
+    "analyzer/diagnostic-manager.cc",
+    "analyzer/engine.cc",
+    "analyzer/feasible-graph.cc",
+    "analyzer/function-set.cc",
+    "analyzer/infinite-loop.cc",
+    "analyzer/infinite-recursion.cc",
+    "analyzer/kf-analyzer.cc",
+    "analyzer/kf-lang-cp.cc",
+    "analyzer/kf.cc",
+    "analyzer/known-function-manager.cc",
+    "analyzer/ops.cc",
+    "analyzer/pending-diagnostic.cc",
+    "analyzer/program-point.cc",
+    "analyzer/program-state.cc",
+    "analyzer/ranges.cc",
+    "analyzer/record-layout.cc",
+    "analyzer/region-model-asm.cc",
+    "analyzer/region-model-manager.cc",
+    "analyzer/region-model-reachability.cc",
+    "analyzer/region-model.cc",
+    "analyzer/region.cc",
+    "analyzer/sm-fd.cc",
+    "analyzer/sm-file.cc",
+    "analyzer/sm-malloc.cc",
+    "analyzer/sm-pattern-test.cc",
+    "analyzer/sm-sensitive.cc",
+    "analyzer/sm-signal.cc",
+    "analyzer/sm-taint.cc",
+    "analyzer/sm.cc",
+    "analyzer/state-purge.cc",
+    "analyzer/store.cc",
+    "analyzer/supergraph-fixup-locations.cc",
+    "analyzer/supergraph-simplify.cc",
+    "analyzer/supergraph-sorting.cc",
+    "analyzer/supergraph.cc",
+    "analyzer/svalue.cc",
+    "analyzer/symbol.cc",
+    "analyzer/trimmed-graph.cc",
+    "analyzer/varargs.cc",
+    # Additional files needed by the backend
+    "attribs.cc",
+    "ipa-visibility.cc",
+    "config/linux.cc",
+]
+
+# Generated source files for libbackend
+_BACKEND_GENERATED_SRCS = [
+    ":gen_insn_attrtab",
+    ":gen_insn_automata",
+    ":gen_insn_emit",
+    ":gen_insn_enums",
+    ":gen_insn_extract",
+    ":gen_insn_modes",
+    ":gen_insn_opinit",
+    ":gen_insn_output",
+    ":gen_insn_peep",
+    ":gen_insn_preds",
+    ":gen_insn_recog",
+    ":gen_gimple_match",
+    ":gen_generic_match",
+    ":gen_options_cc",
+    ":gen_options_save",
+    ":gen_options_urls",
+    ":gen_gtype",
+    ":gen_version_cc",
+]
+
+cc_library(
+    name = "backend",
+    srcs = _BACKEND_SRCS + _BACKEND_GENERATED_SRCS,
+    alwayslink = True,
+    copts = _GCC_COPTS,
+    includes = _GCC_INCLUDES,
+    deps = [
+        ":gcc_headers",
+        ":generated_headers",
+        "//:include",
+        "//libbacktrace:backtrace",
+        "//libcody:cody",
+        "//libcpp:cpp",
+        "//libdecnumber:decnumber",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_config",
+        "@gmp",
+        "@mpc",
+        "@mpfr",
+        "@zlib//:z",
+        "@zstd",
+    ],
+)
+
+# ============================================================================
+# libcommon (host-only common objects)
+# ============================================================================
+
+_LIBCOMMON_SRCS = [
+    # diagnostics/
+    "diagnostics/buffering.cc",
+    "diagnostics/changes.cc",
+    "diagnostics/color.cc",
+    "diagnostics/context.cc",
+    "diagnostics/digraphs.cc",
+    "diagnostics/digraphs-to-dot.cc",
+    "diagnostics/digraphs-to-dot-from-cfg.cc",
+    "diagnostics/dumping.cc",
+    "diagnostics/file-cache.cc",
+    "diagnostics/html-sink.cc",
+    "diagnostics/lazy-paths.cc",
+    "diagnostics/logging.cc",
+    "diagnostics/macro-unwinding.cc",
+    "diagnostics/option-classifier.cc",
+    "diagnostics/output-spec.cc",
+    "diagnostics/paths.cc",
+    "diagnostics/paths-output.cc",
+    "diagnostics/sarif-sink.cc",
+    "diagnostics/selftest-context.cc",
+    "diagnostics/selftest-logical-locations.cc",
+    "diagnostics/selftest-paths.cc",
+    "diagnostics/diagnostics-selftests.cc",
+    "diagnostics/source-printing.cc",
+    "diagnostics/state-graphs-to-dot.cc",
+    "diagnostics/text-sink.cc",
+    # custom-sarif-properties/
+    "custom-sarif-properties/cfg.cc",
+    "custom-sarif-properties/digraphs.cc",
+    "custom-sarif-properties/state-graphs.cc",
+    # text-art/
+    "text-art/box-drawing.cc",
+    "text-art/canvas.cc",
+    "text-art/ruler.cc",
+    "text-art/selftests.cc",
+    "text-art/style.cc",
+    "text-art/styled-string.cc",
+    "text-art/table.cc",
+    "text-art/theme.cc",
+    "text-art/tree-widget.cc",
+    "text-art/widget.cc",
+    # Other common objects
+    "diagnostic-global-context.cc",
+    "gcc-diagnostic-spec.cc",
+    "graphviz.cc",
+    "hash-table.cc",
+    "input.cc",
+    "intl.cc",
+    "json.cc",
+    "json-parsing.cc",
+    "memory-block.cc",
+    "pex.cc",
+    "pretty-print.cc",
+    "pub-sub.cc",
+    "sbitmap.cc",
+    "selftest.cc",
+    "selftest-json.cc",
+    "sort.cc",
+    "vec.cc",
+    "xml.cc",
+]
+
+cc_library(
+    name = "common",
+    srcs = _LIBCOMMON_SRCS,
+    copts = _GCC_COPTS,
+    includes = _GCC_INCLUDES,
+    deps = [
+        ":gcc_headers",
+        ":generated_headers",
+        "//:include",
+        "//libbacktrace:backtrace",
+        "//libcpp:cpp",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_config",
+        "@gmp",
+        "@zlib//:z",
+    ],
+)
+
+# ============================================================================
+# libcommon-target (target-dependent common objects)
+# ============================================================================
+
+cc_library(
+    name = "common_target",
+    srcs = [
+        "common/common-targhooks.cc",
+        "common/config/i386/i386-common.cc",
+        "file-find.cc",
+        "hooks.cc",
+        "opt-suggestions.cc",
+        "opts-common.cc",
+        "opts-diagnostic.cc",
+        "opts.cc",
+        "prefix.cc",
+        "spellcheck.cc",
+        "selftest.cc",
+        "vec.cc",
+        "hash-table.cc",
+        ":gen_options_cc",
+        ":gen_options_urls",
+    ],
+    copts = _GCC_COPTS,
+    includes = _GCC_INCLUDES,
+    deps = [
+        ":gcc_headers",
+        ":generated_headers",
+        ":common",
+        "//:include",
+        "//libcpp:cpp",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_config",
+        "@gmp",
+    ],
+)
+
+# ============================================================================
+# C/C++ shared frontend sources (c-family)
+# ============================================================================
+
+# Shared between C and C++ frontends
+_C_FAMILY_SRCS = [
+    "c-family/c-ada-spec.cc",
+    "c-family/c-attribs.cc",
+    "c-family/c-common.cc",
+    "c-family/c-cppbuiltin.cc",
+    "c-family/c-dump.cc",
+    "c-family/c-format.cc",
+    "c-family/c-gimplify.cc",
+    "c-family/c-indentation.cc",
+    "c-family/c-lex.cc",
+    "c-family/c-omp.cc",
+    "c-family/c-opts.cc",
+    "c-family/c-pch.cc",
+    "c-family/c-ppoutput.cc",
+    "c-family/c-pragma.cc",
+    "c-family/c-pretty-print.cc",
+    "c-family/c-semantics.cc",
+    "c-family/c-spellcheck.cc",
+    "c-family/c-type-mismatch.cc",
+    "c-family/c-ubsan.cc",
+    "c-family/c-warn.cc",
+    "c-family/known-headers.cc",
+    # C_TARGET_OBJS (for i386)
+    "config/i386/i386-c.cc",
+    # Target-specific C/C++ common support
+    "config/glibc-c.cc",
+]
+
+# ============================================================================
+# C Frontend
+# ============================================================================
+
+_C_FRONTEND_SRCS = [
+    "c/c-lang.cc",
+    "c-family/stub-objc.cc",
+    # C_AND_OBJC_OBJS (attribs.cc moved to libbackend due to cross-library deps)
+    "c/c-aux-info.cc",
+    "c/c-convert.cc",
+    "c/c-decl.cc",
+    "c/c-errors.cc",
+    "c/c-fold.cc",
+    "c/c-objc-common.cc",
+    "c/c-parser.cc",
+    "c/c-typeck.cc",
+    "c/gimple-parser.cc",
+] + _C_FAMILY_SRCS
+
+cc_library(
+    name = "c_frontend",
+    srcs = _C_FRONTEND_SRCS,
+    alwayslink = True,
+    copts = _GCC_COPTS + ["-DIN_GCC_FRONTEND"],
+    includes = _GCC_INCLUDES,
+    deps = [
+        ":generated_headers",
+        ":gcc_headers",
+        ":backend",
+        "//:include",
+        "//libcpp:cpp",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_config",
+    ],
+)
+
+# ============================================================================
+# Layer 7: cc1 binary
+# ============================================================================
+
+_CC1_LINKOPTS = [
+    "-lm",
+    "-ldl",
+    "-lpthread",
+]
+
+_CC1_DEPS = [
+    ":backend",
+    ":common",
+    ":common_target",
+    "//:include",
+    "//libbacktrace:backtrace",
+    "//libcody:cody",
+    "//libcpp:cpp",
+    "//libdecnumber:decnumber",
+    "//libiberty:iberty",
+    "@gcc_config//:gcc_config",
+    "@gmp",
+    "@mpc",
+    "@mpfr",
+    "@zlib//:z",
+    "@zstd",
+]
+
+cc_binary(
+    name = "cc1",
+    srcs = [
+        "main.cc",
+        ":gen_cc1_checksum",
+    ],
+    copts = _GCC_COPTS,
+    includes = _GCC_INCLUDES,
+    linkopts = _CC1_LINKOPTS,
+    deps = [":c_frontend"] + _CC1_DEPS,
+)
+
+# ============================================================================
+# C++ Frontend (cc1plus)
+# ============================================================================
+
+_CXX_FRONTEND_SRCS = [
+    "cp/cp-lang.cc",
+    "c-family/stub-objc.cc",
+    "cp/call.cc",
+    "cp/class.cc",
+    "cp/constexpr.cc",
+    "cp/constraint.cc",
+    "cp/contracts.cc",
+    "cp/coroutines.cc",
+    "cp/cp-gimplify.cc",
+    "cp/cp-objcp-common.cc",
+    "cp/cp-ubsan.cc",
+    "cp/cvt.cc",
+    "cp/cxx-pretty-print.cc",
+    "cp/decl.cc",
+    "cp/decl2.cc",
+    "cp/dump.cc",
+    "cp/error.cc",
+    "cp/except.cc",
+    "cp/expr.cc",
+    "cp/friend.cc",
+    "cp/init.cc",
+    "cp/lambda.cc",
+    "cp/lex.cc",
+    "cp/logic.cc",
+    "cp/mangle.cc",
+    "cp/mapper-client.cc",
+    "cp/mapper-resolver.cc",
+    "cp/method.cc",
+    "cp/module.cc",
+    "cp/name-lookup.cc",
+    "cp/optimize.cc",
+    "cp/parser.cc",
+    "cp/pt.cc",
+    "cp/ptree.cc",
+    "cp/reflect.cc",
+    "cp/rtti.cc",
+    "cp/search.cc",
+    "cp/semantics.cc",
+    "cp/tree.cc",
+    "cp/typeck.cc",
+    "cp/typeck2.cc",
+    "cp/vtable-class-hierarchy.cc",
+] + _C_FAMILY_SRCS
+
+cc_library(
+    name = "cxx_frontend",
+    srcs = _CXX_FRONTEND_SRCS,
+    alwayslink = True,
+    copts = _GCC_COPTS + [
+        "-DIN_GCC_FRONTEND",
+        "-DHOST_MACHINE='\"x86_64-linux-gnu\"'",
+    ],
+    includes = _GCC_INCLUDES,
+    deps = [
+        ":generated_headers",
+        ":gcc_headers",
+        ":backend",
+        "//:include",
+        "//:cxxtools",
+        "//libcody:cody",
+        "//libcpp:cpp",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_config",
+    ],
+)
+
+genrule(
+    name = "gen_cc1plus_checksum",
+    outs = ["cc1plus-checksum.cc"],
+    cmd = """
+        cat > $@ << 'CEOF'
+#include "config.h"
+#include "system.h"
+EXPORTED_CONST unsigned char executable_checksum[16] = { 0 };
+CEOF
+    """,
+)
+
+cc_binary(
+    name = "cc1plus",
+    srcs = [
+        "main.cc",
+        ":gen_cc1plus_checksum",
+    ],
+    copts = _GCC_COPTS,
+    includes = _GCC_INCLUDES,
+    linkopts = _CC1_LINKOPTS,
+    deps = [":cxx_frontend"] + _CC1_DEPS,
+)
+
+# ============================================================================
+# LTO Frontend (lto1)
+# ============================================================================
+
+_LTO_FRONTEND_SRCS = [
+    "lto/lto-lang.cc",
+    "lto/lto.cc",
+    "lto/lto-object.cc",
+    "lto/lto-partition.cc",
+    "lto/lto-symtab.cc",
+    "lto/lto-common.cc",
+]
+
+cc_library(
+    name = "lto_frontend",
+    srcs = _LTO_FRONTEND_SRCS,
+    alwayslink = True,
+    copts = _GCC_COPTS + ["-DIN_GCC_FRONTEND"],
+    includes = _GCC_INCLUDES,
+    deps = [
+        ":generated_headers",
+        ":gcc_headers",
+        ":backend",
+        "//:include",
+        "//libcpp:cpp",
+        "//libiberty:iberty",
+        "@gcc_config//:gcc_config",
+    ],
+)
+
+cc_binary(
+    name = "lto1",
+    srcs = [
+        "main.cc",
+        ":gen_cc1_checksum",
+    ],
+    copts = _GCC_COPTS,
+    includes = _GCC_INCLUDES,
+    linkopts = _CC1_LINKOPTS,
+    deps = [":lto_frontend"] + _CC1_DEPS,
+)
+
+# ============================================================================
+# GCC/G++ driver binaries
+# ============================================================================
+
+# multilib.h (no multilib support)
+genrule(
+    name = "gen_multilib_h",
+    outs = ["multilib.h"],
+    cmd = """
+        cat > $@ << 'MLEOF'
+static const char *const multilib_raw[] = {
+".::x86_64-linux-gnu ;",
+NULL
+};
+
+static const char *const multilib_reuse_raw[] = {
+NULL
+};
+
+static const char *const multilib_matches_raw[] = {
+NULL
+};
+
+static const char *multilib_extra = "";
+
+static const char *const multilib_exclusions_raw[] = {
+NULL
+};
+
+static const char *multilib_options = "";
+
+#define DISABLE_MULTILIB  1
+MLEOF
+    """,
+)
+
+# configargs.h stub
+genrule(
+    name = "gen_configargs_h",
+    outs = ["configargs.h"],
+    cmd = """
+        cat > $@ << 'CEOF'
+/* Generated automatically. */
+static const char configuration_arguments[] = "";
+static const char thread_model[] = "posix";
+
+static const struct {
+  const char *name, *value;
+} configure_default_options[] = { { NULL, NULL} };
+CEOF
+    """,
+)
+
+# specs.h - includes per-language lang-specs.h files
+genrule(
+    name = "gen_specs_h",
+    srcs = [
+        "cp/lang-specs.h",
+        "lto/lang-specs.h",
+    ],
+    outs = ["specs.h"],
+    cmd = """
+        echo '#include "cp/lang-specs.h"' > $@
+        echo '#include "lto/lang-specs.h"' >> $@
+    """,
+)
+
+_DRIVER_DEFINES = [
+    "-DACCEL_DIR_SUFFIX='\"\"'",
+    "-DDEFAULT_REAL_TARGET_MACHINE='\"x86_64-linux-gnu\"'",
+    "-DCONFIGURE_SPECS='\"\"'",
+    "-DTOOL_INCLUDE_DIR='\"/usr/local/lib/gcc/x86_64-linux-gnu/16.0.1/include\"'",
+    "-DNATIVE_SYSTEM_HEADER_DIR='\"/usr/include\"'",
+]
+
+_DRIVER_SRCS = [
+    "gcc.cc",
+    "gcc-main.cc",
+    "ggc-none.cc",
+    "gcc-urlifier.cc",
+    # i386 host detection (provides host_detect_local_cpu)
+    "config/i386/driver-i386.cc",
+    ":gen_specs_h",
+    ":gen_multilib_h",
+    ":gen_configargs_h",
+    ":gen_options_urls",
+]
+
+_DRIVER_DEPS = [
+    ":gcc_headers",
+    ":generated_headers",
+    ":common",
+    ":common_target",
+    "//:include",
+    "//libbacktrace:backtrace",
+    "//libcpp:cpp",
+    "//libiberty:iberty",
+    "@gcc_config//:gcc_config",
+    "@gmp",
+    "@zlib//:z",
+]
+
+cc_binary(
+    name = "gcc",
+    srcs = _DRIVER_SRCS + ["c/gccspec.cc"],
+    copts = _GCC_COPTS + _DRIVER_DEFINES,
+    includes = _GCC_INCLUDES,
+    linkopts = ["-lm", "-ldl", "-lpthread"],
+    deps = _DRIVER_DEPS,
+)
+
+cc_binary(
+    name = "g++",
+    srcs = _DRIVER_SRCS + ["cp/g++spec.cc"],
+    copts = _GCC_COPTS + _DRIVER_DEFINES,
+    includes = _GCC_INCLUDES,
+    linkopts = ["-lm", "-ldl", "-lpthread"],
+    deps = _DRIVER_DEPS,
+)
+
+# ============================================================================
+# Additional binaries for a complete GCC distribution
+# ============================================================================
+
+# collect2 - linker wrapper (critical for gcc to link)
+cc_binary(
+    name = "collect2",
+    srcs = ["collect2.cc", "collect2-aix.cc", "collect-utils.cc",
+            "ggc-none.cc", "vec.cc", "file-find.cc", "hash-table.cc", "selftest.cc"],
+    copts = _GCC_COPTS,
+    includes = _GCC_INCLUDES,
+    linkopts = ["-lm", "-ldl", "-lpthread"],
+    deps = [":gcc_headers", ":generated_headers", ":common",
+            "//:include", "//libbacktrace:backtrace", "//libcpp:cpp", "//libiberty:iberty",
+            "@gcc_config//:gcc_config", "@gmp", "@zlib//:z"],
+)
+
+# lto-wrapper - LTO helper invoked by collect2
+cc_binary(
+    name = "lto-wrapper",
+    srcs = ["lto-wrapper.cc", "collect-utils.cc", "ggc-none.cc",
+            "lockfile.cc", "lto-ltrans-cache.cc"],
+    copts = _GCC_COPTS,
+    includes = _GCC_INCLUDES,
+    linkopts = ["-lm", "-ldl", "-lpthread"],
+    deps = [":gcc_headers", ":generated_headers", ":common", ":common_target",
+            "//:include", "//libbacktrace:backtrace", "//libcpp:cpp", "//libiberty:iberty",
+            "@gcc_config//:gcc_config", "@gmp", "@zlib//:z"],
+)
+
+# cpp - preprocessor driver
+cc_binary(
+    name = "cpp",
+    srcs = _DRIVER_SRCS + ["c-family/cppspec.cc"],
+    copts = _GCC_COPTS + _DRIVER_DEFINES,
+    includes = _GCC_INCLUDES,
+    linkopts = ["-lm", "-ldl", "-lpthread"],
+    deps = _DRIVER_DEPS,
+)
+
+# gcov - coverage tool
+cc_binary(
+    name = "gcov",
+    srcs = ["gcov.cc", "json.cc", "graphds.cc", "prime-paths.cc", "bitmap.cc",
+            "hash-table.cc", "ggc-none.cc", "selftest.cc", "vec.cc"],
+    copts = _GCC_COPTS,
+    includes = _GCC_INCLUDES,
+    linkopts = ["-lm", "-ldl", "-lpthread"],
+    deps = [":gcc_headers", ":generated_headers", ":common",
+            "//:include", "//libbacktrace:backtrace", "//libcpp:cpp", "//libiberty:iberty",
+            "@gcc_config//:gcc_config", "@gmp", "@zlib//:z"],
+)
+
+# gcov-dump - coverage dump tool
+cc_binary(
+    name = "gcov-dump",
+    srcs = ["gcov-dump.cc", "hash-table.cc", "ggc-none.cc", "selftest.cc", "vec.cc"],
+    copts = _GCC_COPTS,
+    includes = _GCC_INCLUDES,
+    linkopts = ["-lm", "-ldl", "-lpthread"],
+    deps = [":gcc_headers", ":generated_headers", ":common",
+            "//:include", "//libbacktrace:backtrace", "//libcpp:cpp", "//libiberty:iberty",
+            "@gcc_config//:gcc_config", "@gmp", "@zlib//:z"],
+)
+
+# gcc-ar, gcc-nm, gcc-ranlib - wrappers that invoke ar/nm/ranlib with LTO plugin
+[cc_binary(
+    name = tool,
+    srcs = ["gcc-ar.cc", "file-find.cc"],
+    copts = _GCC_COPTS + ["-DPERSONALITY='\"" + tool.removeprefix("gcc-") + "\"'"],
+    includes = _GCC_INCLUDES,
+    deps = [":gcc_headers", ":generated_headers", "//:include",
+            "//libiberty:iberty", "@gcc_config//:gcc_config", "@gmp"],
+) for tool in ["gcc-ar", "gcc-nm", "gcc-ranlib"]]
+
+# GCC internal headers (stddef.h, stdarg.h, etc.)
+filegroup(
+    name = "ginclude_headers",
+    srcs = glob(["ginclude/*.h"]),
+)
+
+# Target-specific headers for x86_64 (intrinsics, etc.)
+filegroup(
+    name = "extra_headers",
+    srcs = glob(["config/i386/*.h"]),
+)
+
+# mm_malloc.h is gmm_malloc.h renamed (for glibc targets)
+genrule(
+    name = "gen_mm_malloc_h",
+    srcs = ["config/i386/gmm_malloc.h"],
+    outs = ["mm_malloc.h"],
+    cmd = "cp $< $@",
+)
+
+# limits.h = limitx.h + glimits.h + limity.h (wraps system limits.h)
+genrule(
+    name = "gen_limits_h",
+    srcs = ["limitx.h", "glimits.h", "limity.h"],
+    outs = ["gen_limits.h"],
+    cmd = "cat $(location limitx.h) $(location glimits.h) $(location limity.h) > $@",
+)
+
+# syslimits.h is a copy of gsyslimits.h
+genrule(
+    name = "gen_syslimits_h",
+    srcs = ["gsyslimits.h"],
+    outs = ["gen_syslimits.h"],
+    cmd = "cp $< $@",
+)
+
+# Expose libgcc's generated unwind.h for distribution
+alias(
+    name = "unwind_h",
+    actual = "//libgcc:gen_unwind_h",
+)

@@ -1,0 +1,166 @@
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+
+# ============================================================================
+# Aliases for individual binary targets
+# ============================================================================
+
+alias(
+    name = "cc1",
+    actual = "@gcc//gcc:cc1",
+)
+
+alias(
+    name = "cc1plus",
+    actual = "@gcc//gcc:cc1plus",
+)
+
+alias(
+    name = "lto1",
+    actual = "@gcc//gcc:lto1",
+)
+
+alias(
+    name = "gcc",
+    actual = "@gcc//gcc:gcc",
+)
+
+alias(
+    name = "g++",
+    actual = "@gcc//gcc:g++",
+)
+
+alias(
+    name = "collect2",
+    actual = "@gcc//gcc:collect2",
+)
+
+alias(
+    name = "lto-wrapper",
+    actual = "@gcc//gcc:lto-wrapper",
+)
+
+alias(
+    name = "cpp",
+    actual = "@gcc//gcc:cpp",
+)
+
+alias(
+    name = "gcov",
+    actual = "@gcc//gcc:gcov",
+)
+
+alias(
+    name = "gcov-dump",
+    actual = "@gcc//gcc:gcov-dump",
+)
+
+alias(
+    name = "gcc-ar",
+    actual = "@gcc//gcc:gcc-ar",
+)
+
+alias(
+    name = "gcc-nm",
+    actual = "@gcc//gcc:gcc-nm",
+)
+
+alias(
+    name = "gcc-ranlib",
+    actual = "@gcc//gcc:gcc-ranlib",
+)
+
+# ============================================================================
+# GCC distribution tarball
+# ============================================================================
+
+_TARGET = "x86_64-linux-gnu"
+
+_VERSION = "16.0.1"
+
+_LIBEXECDIR = "libexec/gcc/" + _TARGET + "/" + _VERSION
+
+_LIBDIR = "lib/gcc/" + _TARGET + "/" + _VERSION
+
+# User-facing binaries -> bin/
+pkg_files(
+    name = "dist_bin",
+    srcs = [
+        "@gcc//gcc",
+        "@gcc//gcc:cpp",
+        "@gcc//gcc:g++",
+        "@gcc//gcc:gcc-ar",
+        "@gcc//gcc:gcc-nm",
+        "@gcc//gcc:gcc-ranlib",
+        "@gcc//gcc:gcov",
+        "@gcc//gcc:gcov-dump",
+    ],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "bin",
+)
+
+# Internal compiler binaries -> libexec/gcc/<target>/<ver>/
+pkg_files(
+    name = "dist_libexec",
+    srcs = [
+        "@gcc//gcc:cc1",
+        "@gcc//gcc:cc1plus",
+        "@gcc//gcc:collect2",
+        "@gcc//gcc:lto-wrapper",
+        "@gcc//gcc:lto1",
+    ],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = _LIBEXECDIR,
+)
+
+# Runtime libraries and CRT objects -> lib/gcc/<target>/<ver>/
+pkg_files(
+    name = "dist_lib",
+    srcs = [
+        "@gcc//libgcc:crtbegin.o",
+        "@gcc//libgcc:crtbeginS.o",
+        "@gcc//libgcc:crtbeginT.o",
+        "@gcc//libgcc:crtend.o",
+        "@gcc//libgcc:crtendS.o",
+        "@gcc//libgcc:crtfastmath.o",
+        "@gcc//libgcc:crtprec32.o",
+        "@gcc//libgcc:crtprec64.o",
+        "@gcc//libgcc:crtprec80.o",
+        "@gcc//libgcc:libgcc.a",
+        "@gcc//libgcc:libgcc_eh.a",
+        "@gcc//libgcc:libgcc_s",
+    ],
+    prefix = _LIBDIR,
+)
+
+# Internal headers -> lib/gcc/<target>/<ver>/include/
+pkg_files(
+    name = "dist_include",
+    srcs = [
+        "@gcc//gcc:extra_headers",
+        "@gcc//gcc:gen_limits_h",
+        "@gcc//gcc:gen_mm_malloc_h",
+        "@gcc//gcc:gen_syslimits_h",
+        "@gcc//gcc:ginclude_headers",
+        "@gcc//libgcc:gen_unwind_h",
+    ],
+    prefix = _LIBDIR + "/include",
+    # Generated files have different names; renames fix them.
+    renames = {
+        "@gcc//gcc:gen_limits_h": "limits.h",
+        "@gcc//gcc:gen_syslimits_h": "syslimits.h",
+    },
+)
+
+# Assemble the distribution tarball
+pkg_tar(
+    name = "gcc_dist",
+    srcs = [
+        ":dist_bin",
+        ":dist_include",
+        ":dist_lib",
+        ":dist_libexec",
+    ],
+    extension = "tar.gz",
+    package_file_name = "gcc-" + _VERSION + "-" + _TARGET + ".tar.gz",
+)

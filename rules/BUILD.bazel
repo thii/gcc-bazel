@@ -1,0 +1,8 @@
+# This package holds Bazel infrastructure for building GCC.
+# The actual BUILD files for GCC subdirectories are in overlay/.
+
+exports_files(glob([
+    "overlay/*",
+    "deps/*",
+    "gengtype-output/*",
+]))

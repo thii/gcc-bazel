@@ -1,0 +1,104 @@
+load("@rules_cc//cc/toolchains:cc_toolchain.bzl", "cc_toolchain")
+load(":cc_toolchain_config.bzl", "stage_cc_toolchain_config")
+
+package(default_visibility = ["//visibility:public"])
+
+# Path to the sysroot repo from the execution root.
+# With bzlmod, external repos live at external/+gcc_ext+sysroot.
+_SYSROOT_PKG = "external/+gcc_ext+sysroot"
+
+# ===== Stage 1 toolchain (stage1 GCC + sysroot) =====
+
+filegroup(
+    name = "all_stage1_files",
+    srcs = glob(
+        ["stage1/**"],
+        allow_empty = True,
+    ) + ["@sysroot//:all"],
+)
+
+stage_cc_toolchain_config(
+    name = "stage1_config",
+    gcc_execroot_prefix = "toolchain/stage1",
+    gcc_prefix = "stage1",
+    stage_id = "stage1",
+    sysroot_package = _SYSROOT_PKG,
+)
+
+cc_toolchain(
+    name = "stage1_cc_toolchain",
+    all_files = ":all_stage1_files",
+    ar_files = ":all_stage1_files",
+    as_files = ":all_stage1_files",
+    compiler_files = ":all_stage1_files",
+    dwp_files = ":all_stage1_files",
+    linker_files = ":all_stage1_files",
+    objcopy_files = ":all_stage1_files",
+    strip_files = ":all_stage1_files",
+    supports_header_parsing = 1,
+    supports_param_files = 1,
+    toolchain_config = ":stage1_config",
+    toolchain_identifier = "stage1-gcc",
+)
+
+toolchain(
+    name = "stage1_toolchain",
+    exec_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+    target_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+    toolchain = ":stage1_cc_toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+# ===== Stage 2 toolchain (stage2 GCC + sysroot) =====
+
+filegroup(
+    name = "all_stage2_files",
+    srcs = glob(
+        ["stage2/**"],
+        allow_empty = True,
+    ) + ["@sysroot//:all"],
+)
+
+stage_cc_toolchain_config(
+    name = "stage2_config",
+    gcc_execroot_prefix = "toolchain/stage2",
+    gcc_prefix = "stage2",
+    stage_id = "stage2",
+    sysroot_package = _SYSROOT_PKG,
+)
+
+cc_toolchain(
+    name = "stage2_cc_toolchain",
+    all_files = ":all_stage2_files",
+    ar_files = ":all_stage2_files",
+    as_files = ":all_stage2_files",
+    compiler_files = ":all_stage2_files",
+    dwp_files = ":all_stage2_files",
+    linker_files = ":all_stage2_files",
+    objcopy_files = ":all_stage2_files",
+    strip_files = ":all_stage2_files",
+    supports_header_parsing = 1,
+    supports_param_files = 1,
+    toolchain_config = ":stage2_config",
+    toolchain_identifier = "stage2-gcc",
+)
+
+toolchain(
+    name = "stage2_toolchain",
+    exec_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+    target_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+    toolchain = ":stage2_cc_toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
