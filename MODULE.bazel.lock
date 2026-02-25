@@ -203,7 +203,7 @@
   "moduleExtensions": {
     "//rules:extensions.bzl%gcc_ext": {
       "general": {
-        "bzlTransitiveDigest": "2SV/gAoEMyShEceoJX7i+kqtueUe2QFMH6JkJPJWCJw=",
+        "bzlTransitiveDigest": "8nKvO4rGVd2UNDJyM1e8qNSvDTKcwgiiaGIIZEaIdIc=",
         "usagesDigest": "l/eKiLHe4Bj9AoxRXQZzMb4hYfLGRuSNgZbjo7Cry3w=",
         "recordedInputs": [],
         "generatedRepoSpecs": {

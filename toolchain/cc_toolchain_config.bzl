@@ -185,6 +185,11 @@ def _impl(ctx):
                 flag_groups = [
                     flag_group(
                         flags = [
+                            # Use system GCC's CRT objects (crtbegin.o, crtend.o)
+                            # from the sysroot instead of the stage tarball's
+                            # copies, which may have been compiled by a
+                            # different compiler.
+                            "-B" + sysroot_lib,
                             "-B" + sysroot_pkg + "/bin",
                             "-L" + sysroot_lib,
                             "-Wl,-no-as-needed",
@@ -222,6 +227,9 @@ def _impl(ctx):
                             '-D__DATE__="redacted"',
                             '-D__TIMESTAMP__="redacted"',
                             '-D__TIME__="redacted"',
+                            # Normalize stage-specific paths so __FILE__ and
+                            # debug info match between stage2 and stage3.
+                            "-ffile-prefix-map=" + gcc_execroot + "=toolchain/stage",
                             # GCC has no built-in include paths; add them explicitly.
                             # Order matters: GCC internal first, then C++ (they #include_next C headers).
                             "-isystem",

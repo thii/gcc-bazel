@@ -299,7 +299,7 @@ genrule(
         for a in $(SRCS); do
             case $$a in *.a) ar x $$a --output=$$TMP ;; esac
         done
-        ar rcs $@ $$TMP/*.o
+        ar rcsD $@ $$TMP/*.o
     """,
 )
 
@@ -313,7 +313,7 @@ genrule(
         for a in $(SRCS); do
             case $$a in *.a) ar x $$a --output=$$TMP ;; esac
         done
-        ar rcs $@ $$TMP/*.o
+        ar rcsD $@ $$TMP/*.o
     """,
 )
 

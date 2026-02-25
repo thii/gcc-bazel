@@ -28,3 +28,5 @@ tar xf bazel-bin/gcc-16.0.1-x86_64-linux-gnu.tar.gz -C toolchain/stage2
 # Stage 3: stage 2 GCC builds GCC
 bazel build --config=stage3 //:gcc_dist
 ```
+
+Stage 2 and stage 3 outputs should be bit-identical.

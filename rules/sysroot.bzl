@@ -20,6 +20,14 @@ _CRT_OBJECTS = [
     "Scrt1.o",
 ]
 
+_GCC_CRT_OBJECTS = [
+    "crtbegin.o",
+    "crtend.o",
+    "crtbeginS.o",
+    "crtendS.o",
+    "crtbeginT.o",
+]
+
 _LIBS = [
     "libc.so",
     "libm.so",
@@ -93,6 +101,11 @@ def _sysroot_impl(repository_ctx):
     # CRT objects (from multiarch dir)
     for obj in _CRT_OBJECTS:
         _copy_file(repository_ctx, multiarch_lib + "/" + obj, "lib/" + obj)
+
+    # GCC CRT objects (crtbegin.o, crtend.o, etc.) — use system GCC's copies
+    # so both bootstrap stages link with identical CRT objects.
+    for obj in _GCC_CRT_OBJECTS:
+        _copy_file(repository_ctx, gcc_lib + "/" + obj, "lib/" + obj)
 
     # System libraries
     for lib in _LIBS:

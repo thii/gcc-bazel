@@ -8,4 +8,9 @@ build --host_copt=-DIN_GCC
 build --host_copt=-fno-exceptions
 
 build:stage2 --extra_toolchains=//toolchain:stage1_toolchain
+build:stage2 --copt=-O2
+build:stage2 --copt=-g0
+
 build:stage3 --extra_toolchains=//toolchain:stage2_toolchain
+build:stage3 --copt=-O2
+build:stage3 --copt=-g0
