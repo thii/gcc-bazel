@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_cc//cc:cc_static_library.bzl", "cc_static_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -300,31 +301,15 @@ cc_library(
 # libgcc.a - static runtime library (combined archive)
 # ============================================================================
 
-genrule(
-    name = "libgcc",
-    srcs = [":libgcc2_objs", ":libgcc_eh_objs"],
-    outs = ["libgcc.a"],
-    cmd = """
-        TMP=$$(mktemp -d)
-        for a in $(SRCS); do
-            case $$a in *.a) ar x $$a --output=$$TMP ;; esac
-        done
-        ar rcsD $@ $$TMP/*.o
-    """,
+cc_static_library(
+    name = "gcc",
+    deps = [":libgcc2_objs", ":libgcc_eh_objs"],
 )
 
 # libgcc_eh.a - exception handling only (for static linking with -static-libgcc)
-genrule(
-    name = "libgcc_eh",
-    srcs = [":libgcc_eh_objs"],
-    outs = ["libgcc_eh.a"],
-    cmd = """
-        TMP=$$(mktemp -d)
-        for a in $(SRCS); do
-            case $$a in *.a) ar x $$a --output=$$TMP ;; esac
-        done
-        ar rcsD $@ $$TMP/*.o
-    """,
+cc_static_library(
+    name = "gcc_eh",
+    deps = [":libgcc_eh_objs"],
 )
 
 # ============================================================================
