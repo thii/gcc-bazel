@@ -91,6 +91,16 @@ cc_library(
     includes = [".", "config"],
 )
 
+# Unwind headers needed by libsupc++ (in libstdc++-v3)
+cc_library(
+    name = "unwind_headers",
+    hdrs = [
+        "unwind-pe.h",
+        ":gen_unwind_h",
+    ],
+    includes = ["."],
+)
+
 # ============================================================================
 # CRT objects (standalone .o files from crtstuff.c)
 # ============================================================================

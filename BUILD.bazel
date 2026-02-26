@@ -152,7 +152,34 @@ pkg_files(
     },
 )
 
-# Assemble the distribution tarball
+# Runtime libraries: libstdc++ -> lib/gcc/<target>/<ver>/
+pkg_files(
+    name = "dist_libstdcxx",
+    srcs = [
+        "@gcc//libstdc++-v3:stdc++",
+        "@gcc//libstdc++-v3:stdc++_shared",
+    ],
+    prefix = _LIBDIR,
+)
+
+# Stage 1 tarball: compiler + libgcc only (no libstdc++).
+# Can be built with the system (host) compiler.
+#   bazel build //:gcc_dist_stage1
+pkg_tar(
+    name = "gcc_dist_stage1",
+    srcs = [
+        ":dist_bin",
+        ":dist_include",
+        ":dist_lib",
+        ":dist_libexec",
+    ],
+    extension = "tar.gz",
+    package_file_name = "gcc-" + _VERSION + "-" + _TARGET + ".tar.gz",
+)
+
+# Full distribution tarball: compiler + libgcc + libstdc++.
+# Requires a GCC 16 toolchain (--config=stage2 or --config=stage3).
+#   bazel build //:gcc_dist --config=stage2
 pkg_tar(
     name = "gcc_dist",
     srcs = [
@@ -160,6 +187,7 @@ pkg_tar(
         ":dist_include",
         ":dist_lib",
         ":dist_libexec",
+        ":dist_libstdcxx",
     ],
     extension = "tar.gz",
     package_file_name = "gcc-" + _VERSION + "-" + _TARGET + ".tar.gz",

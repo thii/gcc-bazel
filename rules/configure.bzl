@@ -19,6 +19,30 @@ _CONFIG_HEADERS = {
     "libcody/config.h": "libcody/config.h",
     "libgcc/config.h": "libgcc/config.h",
     "libgcc/auto-target.h": "libgcc/auto-target.h",
+    "libstdc++/config.h": "libstdc++/config.h",
+    "libstdc++/c++config.h": "libstdc++/c++config.h",
+    "libstdc++/gthr.h": "libstdc++/gthr.h",
+    "libstdc++/gthr-default.h": "libstdc++/gthr-default.h",
+    "libstdc++/gthr-posix.h": "libstdc++/gthr-posix.h",
+    "libstdc++/gthr-single.h": "libstdc++/gthr-single.h",
+    "libstdc++/os_defines.h": "libstdc++/os_defines.h",
+    "libstdc++/cpu_defines.h": "libstdc++/cpu_defines.h",
+    "libstdc++/ctype_base.h": "libstdc++/ctype_base.h",
+    "libstdc++/ctype_inline.h": "libstdc++/ctype_inline.h",
+    "libstdc++/c++allocator.h": "libstdc++/c++allocator.h",
+    "libstdc++/c++io.h": "libstdc++/c++io.h",
+    "libstdc++/c++locale.h": "libstdc++/c++locale.h",
+    "libstdc++/basic_file.h": "libstdc++/basic_file.h",
+    "libstdc++/c++locale_internal.h": "libstdc++/c++locale_internal.h",
+    "libstdc++/messages_members.h": "libstdc++/messages_members.h",
+    "libstdc++/time_members.h": "libstdc++/time_members.h",
+    "libstdc++/error_constants.h": "libstdc++/error_constants.h",
+    "libstdc++/atomic_word.h": "libstdc++/atomic_word.h",
+    "libstdc++/cxxabi_tweaks.h": "libstdc++/cxxabi_tweaks.h",
+    "libstdc++/opt_random.h": "libstdc++/opt_random.h",
+    "libstdc++/largefile-config.h": "libstdc++/largefile-config.h",
+    "libstdc++/compatibility.h": "libstdc++/compatibility.h",
+    "libstdc++/backtrace-supported.h": "libstdc++/backtrace-supported.h",
 }
 
 def _gcc_configure_impl(repository_ctx):
@@ -89,6 +113,13 @@ cc_library(
     name = "libgcc_config",
     hdrs = glob(["libgcc/*.h"], allow_empty = True),
     includes = ["libgcc"],
+)
+
+# libstdc++ config headers
+cc_library(
+    name = "libstdcxx_config",
+    hdrs = glob(["libstdc++/*.h"], allow_empty = True),
+    includes = ["libstdc++"],
 )
 """
 

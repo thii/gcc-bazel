@@ -9,6 +9,7 @@ _OVERLAYS = {
     "libbacktrace/BUILD.bazel": Label("//rules/overlay:libbacktrace.BUILD"),
     "libcody/BUILD.bazel": Label("//rules/overlay:libcody.BUILD"),
     "libgcc/BUILD.bazel": Label("//rules/overlay:libgcc.BUILD"),
+    "libstdc++-v3/BUILD.bazel": Label("//rules/overlay:libstdc++.BUILD"),
 }
 
 def _gcc_source_impl(repository_ctx):
